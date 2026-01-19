@@ -2,15 +2,15 @@ import logging
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-import config
-import models
-from models import Session
-from user_service import UserService
-from profile_service import ProfileService
-from matching_service import MatchingService
+from app.core import config
+from app.models import *
+from app.models.database import Session
+from app.services.user_service import UserService
+from app.services.profile_service import ProfileService
+from app.services.matching_service import MatchingService
 import io
 from telegram.error import BadRequest
-from matching_service import preload_profiles
+from app.services.matching_service import preload_profiles
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -519,15 +519,15 @@ async def handle_profile_action(update: Update, context: ContextTypes.DEFAULT_TY
             result = matching_service.like_profile(session, user_profile["profile_id"], profile_id)
 
             if result.get("is_match"):
-                other_profile = session.query(models.Profile).filter_by(id=profile_id).first()
+                other_profile = session.query(Profile).filter_by(id=profile_id).first()
 
                 if not other_profile:
                     logger.error(f"Could not find profile {profile_id} for match notification")
                     await query.answer("Произошла ошибка. Попробуйте еще раз.")
                     return
 
-                other_user = session.query(models.User).join(models.Profile).filter(
-                    models.Profile.id == other_profile.id).first()
+                other_user = session.query(User).join(Profile).filter(
+                    Profile.id == other_profile.id).first()
 
                 await query.answer(f"У вас новая пара с {other_profile.name}!")
 
@@ -554,7 +554,7 @@ async def handle_profile_action(update: Update, context: ContextTypes.DEFAULT_TY
 
                 try:
                     if other_user:
-                        this_user = session.query(models.User).filter(models.User.telegram_id == user_id).first()
+                        this_user = session.query(User).filter(User.telegram_id == user_id).first()
 
                         other_match_keyboard = []
                         if this_user and this_user.username:
@@ -1564,7 +1564,7 @@ async def show_matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 session = Session()
                 try:
-                    match = session.query(models.Match).filter_by(id=match_id).first()
+                    match = session.query(Match).filter_by(id=match_id).first()
                     if match and not match.initiated_chat:
                         match.initiated_chat = True
                         session.commit()
@@ -1619,8 +1619,8 @@ async def show_matches(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = []
 
-        other_user = session.query(models.User).join(models.Profile).filter(
-            models.Profile.id == other_profile.get('id')).first()
+        other_user = session.query(User).join(Profile).filter(
+            Profile.id == other_profile.get('id')).first()
 
         if other_user and other_user.username:
             keyboard.append([

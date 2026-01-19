@@ -1,16 +1,18 @@
 import logging
+import signal
+import sys
 from celery.schedules import crontab
 from celery_app import celery_app
 from bot import main as bot_main
-import config
-from rating_service import update_all_ratings
+from app.core.config import *
+from app.services.rating_service import update_all_ratings
 from datetime import datetime, timedelta
-from models import Session, User, Match
+from app.models import Session, User, Match
 
 logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL),
+    level=getattr(logging, LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename=config.LOG_FILE
+    filename=LOG_FILE
 )
 
 
@@ -55,5 +57,19 @@ def cleanup_expired_data():
         session.close()
 
 
+def signal_handler(signum, frame):
+    logging.info(f"Получен сигнал {signum}, начинаю корректное завершение...")
+    logging.info("Корректное завершение работы завершено")
+    sys.exit(0)
+
 if __name__ == "__main__":
-    bot_main()
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    logging.info("Бот запущен с поддержкой graceful shutdown")
+    
+    try:
+        bot_main()
+    except KeyboardInterrupt:
+        logging.info("Получен сигнал прерывания, завершаю работу...")
+        signal_handler(signal.SIGINT, None)

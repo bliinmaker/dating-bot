@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
-import models
-from s3_client import S3Client
-from redis_client import RedisClient
-from rating_service import RatingService
+from app.models import *
+from app.core.s3_client import S3Client
+from app.core.redis_client import RedisClient
+from app.services.rating_service import RatingService
 from typing import Dict, List, Optional, Any
 import logging
 from datetime import datetime
@@ -15,7 +15,7 @@ class ProfileService:
         self.redis_client = RedisClient()
         logger.info("Profile service initialized")
 
-    def create_profile(self, session: Session, user_id: int, profile_data: Dict[str, Any]) -> Optional[models.Profile]:
+    def create_profile(self, session: Session, user_id: int, profile_data: Dict[str, Any]) -> Optional[Profile]:
         """Create a new profile for a user"""
         try:
             gender = profile_data.get("gender", "")
@@ -26,7 +26,7 @@ class ProfileService:
             else:
                 preferred_gender = None
 
-            profile = models.Profile(
+            profile = Profile(
                 user_id=user_id,
                 name=profile_data.get("name", ""),
                 age=profile_data.get("age"),
@@ -43,7 +43,7 @@ class ProfileService:
             session.add(profile)
             session.commit()
 
-            rating = models.Rating(profile_id=profile.id)
+            rating = Rating(profile_id=profile.id)
             session.add(rating)
             session.commit()
 
@@ -56,11 +56,10 @@ class ProfileService:
             logger.error(f"Error creating profile for user {user_id}: {e}")
             return None
 
-    def update_profile(self, session: Session, profile_id: int, profile_data: Dict[str, Any]) -> Optional[
-        models.Profile]:
+    def update_profile(self, session: Session, profile_id: int, profile_data: Dict[str, Any]) -> Optional[Profile]:
         """Update an existing profile"""
         try:
-            profile = session.query(models.Profile).filter_by(id=profile_id).first()
+            profile = session.query(Profile).filter_by(id=profile_id).first()
             if not profile:
                 logger.error(f"Profile {profile_id} not found for update")
                 return None
@@ -120,16 +119,16 @@ class ProfileService:
             if not s3_path:
                 return None
 
-            profile = session.query(models.Profile).filter_by(id=profile_id).first()
+            profile = session.query(Profile).filter_by(id=profile_id).first()
             if not profile:
                 logger.error(f"Profile {profile_id} not found when adding photo")
                 return None
 
             if is_main:
-                session.query(models.Photo).filter_by(profile_id=profile_id, is_main=True).update(
+                session.query(Photo).filter_by(profile_id=profile_id, is_main=True).update(
                     {"is_main": False})
 
-            photo = models.Photo(
+            photo = Photo(
                 profile_id=profile_id,
                 s3_path=s3_path,
                 telegram_file_id=telegram_file_id,
@@ -155,7 +154,7 @@ class ProfileService:
     def get_photos(self, session: Session, profile_id: int) -> List[Dict[str, Any]]:
         """Get all photos for a profile with their telegram file IDs (if available)"""
         try:
-            photos = session.query(models.Photo).filter_by(profile_id=profile_id).all()
+            photos = session.query(Photo).filter_by(profile_id=profile_id).all()
             result = []
 
             for photo in photos:
@@ -188,14 +187,14 @@ class ProfileService:
             if cached_profile:
                 return cached_profile
 
-            profile = session.query(models.Profile).filter_by(id=profile_id).first()
+            profile = session.query(Profile).filter_by(id=profile_id).first()
             if not profile:
                 logger.error(f"Profile {profile_id} not found")
                 return None
 
             photos = self.get_photos(session, profile_id)
 
-            rating = session.query(models.Rating).filter_by(profile_id=profile_id).first()
+            rating = session.query(Rating).filter_by(profile_id=profile_id).first()
 
             result = {
                 "id": profile.id,

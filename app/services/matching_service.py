@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
-import models
-from redis_client import RedisClient
-from rating_service import RatingService
+from app.models import *
+from app.core.redis_client import RedisClient
+from app.services.rating_service import RatingService
 from typing import Dict, List, Optional, Any
 import logging
 from datetime import datetime
 from celery_app import celery_app
-import config
+from app.core import config
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,14 @@ class MatchingService:
     def like_profile(self, session: Session, from_profile_id: int, to_profile_id: int) -> Dict[str, Any]:
         """Record a like interaction and check for a match"""
         try:
-            interaction = models.Interaction(
+            interaction = Interaction(
                 from_profile_id=from_profile_id,
                 to_profile_id=to_profile_id,
                 type="like"
             )
             session.add(interaction)
 
-            mutual_like = session.query(models.Interaction).filter_by(
+            mutual_like = session.query(Interaction).filter_by(
                 from_profile_id=to_profile_id,
                 to_profile_id=from_profile_id,
                 type="like"
@@ -36,7 +36,7 @@ class MatchingService:
             match_id = None
 
             if mutual_like:
-                match = models.Match(
+                match = Match(
                     profile_id_1=from_profile_id,
                     profile_id_2=to_profile_id,
                     status="active"
@@ -50,8 +50,8 @@ class MatchingService:
                 RatingService.update_profile_rating(session, from_profile_id)
                 RatingService.update_profile_rating(session, to_profile_id)
 
-                from_user_id = session.query(models.Profile.user_id).filter_by(id=from_profile_id).scalar()
-                to_user_id = session.query(models.Profile.user_id).filter_by(id=to_profile_id).scalar()
+                from_user_id = session.query(Profile.user_id).filter_by(id=from_profile_id).scalar()
+                to_user_id = session.query(Profile.user_id).filter_by(id=to_profile_id).scalar()
 
                 if from_user_id:
                     self.redis_client.delete_profile_list(from_user_id)
@@ -79,7 +79,7 @@ class MatchingService:
     def skip_profile(self, session: Session, from_profile_id: int, to_profile_id: int) -> Dict[str, bool]:
         """Record a skip interaction"""
         try:
-            interaction = models.Interaction(
+            interaction = Interaction(
                 from_profile_id=from_profile_id,
                 to_profile_id=to_profile_id,
                 type="skip"
@@ -97,21 +97,21 @@ class MatchingService:
     def get_matches(self, session: Session, profile_id: int) -> List[Dict[str, Any]]:
         """Get all matches for a profile"""
         try:
-            matches = session.query(models.Match).filter(
-                ((models.Match.profile_id_1 == profile_id) | (models.Match.profile_id_2 == profile_id)),
-                models.Match.status == "active"
+            matches = session.query(Match).filter(
+                ((Match.profile_id_1 == profile_id) | (Match.profile_id_2 == profile_id)),
+                Match.status == "active"
             ).all()
 
             result = []
             for match in matches:
                 other_profile_id = match.profile_id_2 if match.profile_id_1 == profile_id else match.profile_id_1
 
-                other_profile = session.query(models.Profile).filter_by(id=other_profile_id).first()
+                other_profile = session.query(Profile).filter_by(id=other_profile_id).first()
                 if not other_profile:
                     continue
 
-                last_message = session.query(models.Message).filter_by(match_id=match.id).order_by(
-                    models.Message.created_at.desc()
+                last_message = session.query(Message).filter_by(match_id=match.id).order_by(
+                    Message.created_at.desc()
                 ).first()
 
                 match_info = {
@@ -142,12 +142,12 @@ class MatchingService:
         Dict[str, Any]]:
         """Get the next batch of profiles for a user to view"""
         try:
-            profile = session.query(models.Profile).join(models.User).filter(models.User.id == user_id).first()
+            profile = session.query(Profile).join(User).filter(User.id == user_id).first()
             if not profile:
                 logger.error(f"Profile not found for user {user_id}")
                 return []
 
-            interacted_profiles = session.query(models.Interaction.to_profile_id).filter_by(
+            interacted_profiles = session.query(Interaction.to_profile_id).filter_by(
                 from_profile_id=profile.id
             ).all()
             interacted_profile_ids = [p[0] for p in interacted_profiles]
@@ -169,7 +169,7 @@ class MatchingService:
 @celery_app.task
 def preload_profiles(user_id: int):
     """Preload profiles for a user into Redis cache"""
-    session = models.Session()
+    session = Session()
     try:
         matching_service = MatchingService()
         profiles = matching_service.get_next_profiles(session, user_id)

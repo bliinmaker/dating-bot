@@ -1,6 +1,6 @@
 import boto3
 from botocore.client import Config
-import config
+from . import config
 import logging
 import uuid
 from typing import Optional, Tuple

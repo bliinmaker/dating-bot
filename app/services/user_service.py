@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-import models
+from app.models import *
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime
@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 
 class UserService:
     @staticmethod
-    def get_or_create_user(session: Session, telegram_id: int, telegram_username: Optional[str] = None) -> models.User:
+    def get_or_create_user(session: Session, telegram_id: int, telegram_username: Optional[str] = None) -> User:
         """Get a user by Telegram ID or create if not exists"""
         try:
-            user = session.query(models.User).filter_by(telegram_id=telegram_id).first()
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
 
             if not user:
-                user = models.User(
+                user = User(
                     telegram_id=telegram_id,
                     username=telegram_username
                 )
@@ -39,17 +39,17 @@ class UserService:
     def get_user_profile(session: Session, telegram_id: int) -> Optional[Dict[str, Any]]:
         """Get a user's profile data"""
         try:
-            user = session.query(models.User).filter_by(telegram_id=telegram_id).first()
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if not user:
                 logger.error(f"User with Telegram ID {telegram_id} not found")
                 return None
 
-            profile = session.query(models.Profile).filter_by(user_id=user.id).first()
+            profile = session.query(Profile).filter_by(user_id=user.id).first()
             if not profile:
                 logger.debug(f"Profile not found for user with Telegram ID {telegram_id}")
                 return {"has_profile": False, "user_id": user.id}
 
-            photos = session.query(models.Photo).filter_by(profile_id=profile.id).all()
+            photos = session.query(Photo).filter_by(profile_id=profile.id).all()
             photo_data = []
 
             for photo in photos:

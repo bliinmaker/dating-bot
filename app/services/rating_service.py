@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-import models
+from app.models import *
 from typing import List, Dict, Any
-import config
+from app.core import config
 import logging
 from celery_app import celery_app
 
@@ -20,7 +20,7 @@ class RatingService:
         3) Включает первичные предпочтения пользователя (возрастной диапазон, пол, город)
         """
         try:
-            profile = session.query(models.Profile).filter_by(id=profile_id).first()
+            profile = session.query(Profile).filter_by(id=profile_id).first()
             if not profile:
                 logger.error(f"Profile {profile_id} not found when calculating primary rating")
                 return 0.0
@@ -54,13 +54,13 @@ class RatingService:
         2) Включает временные параметры (активность в определенное время суток)
         """
         try:
-            total_views = session.query(func.count(models.Interaction.id)).filter(
-                models.Interaction.to_profile_id == profile_id
+            total_views = session.query(func.count(Interaction.id)).filter(
+                Interaction.to_profile_id == profile_id
             ).scalar() or 0
 
-            likes_received = session.query(func.count(models.Interaction.id)).filter(
-                models.Interaction.to_profile_id == profile_id,
-                models.Interaction.type == "like"
+            likes_received = session.query(func.count(Interaction.id)).filter(
+                Interaction.to_profile_id == profile_id,
+                Interaction.type == "like"
             ).scalar() or 0
 
             likes_score = min(likes_received / 100, 1.0) * 0.3
@@ -70,8 +70,8 @@ class RatingService:
                 ratio = likes_received / total_views
                 ratio_score = ratio * 0.3
 
-            matches_count = session.query(func.count(models.Match.id)).filter(
-                ((models.Match.profile_id_1 == profile_id) | (models.Match.profile_id_2 == profile_id))
+            matches_count = session.query(func.count(Match.id)).filter(
+                ((Match.profile_id_1 == profile_id) | (Match.profile_id_2 == profile_id))
             ).scalar() or 0
 
             match_score = 0.0
@@ -79,9 +79,9 @@ class RatingService:
                 match_ratio = min(matches_count / likes_received, 0.5) / 0.5
                 match_score = match_ratio * 0.2
 
-            initiated_chats = session.query(func.count(models.Match.id)).filter(
-                ((models.Match.profile_id_1 == profile_id) | (models.Match.profile_id_2 == profile_id)),
-                models.Match.initiated_chat == True
+            initiated_chats = session.query(func.count(Match.id)).filter(
+                ((Match.profile_id_1 == profile_id) | (Match.profile_id_2 == profile_id)),
+                Match.initiated_chat == True
             ).scalar() or 0
 
             chat_score = 0.0
@@ -116,9 +116,9 @@ class RatingService:
             behavioral_rating = RatingService.calculate_behavioral_rating(session, profile_id)
             combined_rating = RatingService.calculate_combined_rating(primary_rating, behavioral_rating)
 
-            rating = session.query(models.Rating).filter_by(profile_id=profile_id).first()
+            rating = session.query(Rating).filter_by(profile_id=profile_id).first()
             if not rating:
-                rating = models.Rating(
+                rating = Rating(
                     profile_id=profile_id,
                     primary_rating=primary_rating,
                     behavioral_rating=behavioral_rating,
@@ -151,29 +151,29 @@ class RatingService:
     def get_ranked_profiles(session: Session, user_profile_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """Get ranked profiles for a user based on preferences and ratings"""
         try:
-            user_profile = session.query(models.Profile).filter_by(id=user_profile_id).first()
+            user_profile = session.query(Profile).filter_by(id=user_profile_id).first()
             if not user_profile:
                 logger.error(f"Profile {user_profile_id} not found when getting ranked profiles")
                 return []
 
-            interacted_profiles = session.query(models.Interaction.to_profile_id).filter_by(
+            interacted_profiles = session.query(Interaction.to_profile_id).filter_by(
                 from_profile_id=user_profile_id
             ).all()
             interacted_profile_ids = [p[0] for p in interacted_profiles]
 
             matching_profiles = session.query(
-                models.Profile, models.Rating
+                Profile, Rating
             ).join(
-                models.Rating, models.Profile.id == models.Rating.profile_id
+                Rating, Profile.id == Rating.profile_id
             ).filter(
-                models.Profile.gender == user_profile.preferred_gender if user_profile.preferred_gender else True,
-                models.Profile.age >= user_profile.preferred_age_min if user_profile.preferred_age_min else True,
-                models.Profile.age <= user_profile.preferred_age_max if user_profile.preferred_age_max else True,
-                models.Profile.location == user_profile.preferred_location if user_profile.preferred_location else True,
-                models.Profile.id != user_profile_id,
-                ~models.Profile.id.in_(interacted_profile_ids) if interacted_profile_ids else True
+                Profile.gender == user_profile.preferred_gender if user_profile.preferred_gender else True,
+                Profile.age >= user_profile.preferred_age_min if user_profile.preferred_age_min else True,
+                Profile.age <= user_profile.preferred_age_max if user_profile.preferred_age_max else True,
+                Profile.location == user_profile.preferred_location if user_profile.preferred_location else True,
+                Profile.id != user_profile_id,
+                ~Profile.id.in_(interacted_profile_ids) if interacted_profile_ids else True
             ).order_by(
-                desc(models.Rating.combined_rating)
+                desc(Rating.combined_rating)
             ).limit(limit).all()
 
             result = []
@@ -206,9 +206,9 @@ class RatingService:
 def update_all_ratings():
     """Periodic task to update all profile ratings"""
     logger.info("Starting batch update of all profile ratings")
-    session = models.Session()
+    session = Session()
     try:
-        profiles = session.query(models.Profile).all()
+        profiles = session.query(Profile).all()
         updated_count = 0
 
         for profile in profiles:

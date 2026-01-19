@@ -2,7 +2,7 @@ import redis
 import pickle
 import json
 from typing import List, Dict, Any
-import config
+from . import config
 import logging
 
 logger = logging.getLogger(__name__)
